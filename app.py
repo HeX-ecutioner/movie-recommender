@@ -1,9 +1,6 @@
-# app.py
-
 import os
 import streamlit as st
 import pandas as pd
-import numpy as np
 import requests
 import re
 from sklearn.preprocessing import MultiLabelBinarizer
@@ -15,11 +12,8 @@ from io import BytesIO
 st.set_page_config(page_title="Movie Recommender", layout="wide")
 st.title("🎬 Movie Recommender System")
 
-# ----------------------------
+
 # Utility functions
-# ----------------------------
-
-
 def clean_title(title):
     return re.sub(r"\(\d{4}\)", "", title).strip()
 
@@ -37,6 +31,13 @@ def best_match(results, clean_title, year=None):
         if score > best_score:
             best, best_score = r, score
     return best
+
+
+def render_stars(rating: float) -> str:
+    full = int(rating)
+    half = 1 if rating - full >= 0.5 else 0
+    empty = 5 - full - half
+    return "★" * full + ("⯨" if half else "") + "☆" * empty
 
 
 def tmdb_search_poster(title, year, tmdb_api_key):
@@ -72,11 +73,7 @@ def tmdb_search_poster(title, year, tmdb_api_key):
         return Image.open("assets/no_poster.png")
 
 
-# ----------------------------
 # Load MovieLens data
-# ----------------------------
-
-
 @st.cache_data
 def download_movielens_small(dest_path="./data"):
     os.makedirs(dest_path, exist_ok=True)
@@ -185,39 +182,55 @@ def recommend_by_genre(
     return recommendations
 
 
-# ----------------------------
 # Main App Logic
-# ----------------------------
-
 movies, ratings = load_data()
 rating_agg = aggregate_ratings(ratings)
 genre_matrix = build_genre_matrix(movies)
 similarity_matrix = compute_similarity(genre_matrix)
 
-# --- Data Exploration ---
 st.header("📊 Data Exploration")
 col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Total Movies", movies.shape[0])
-with col2:
-    st.metric("Total Ratings", ratings.shape[0])
-with col3:
-    st.metric("Unique Users", ratings["userId"].nunique())
 
-# Top 5 most-rated movies
-st.subheader("Top 5 Most-Rated Movies")
+with col1:
+    st.markdown(
+        f"<div><p style='margin-bottom:0; font-size:18px;'>Total Movies</p>"
+        f"<p style='margin-top:0; font-size:28px; font-weight:bold;'>{movies.shape[0]}</p></div>",
+        unsafe_allow_html=True,
+    )
+
+with col2:
+    st.markdown(
+        f"<div><p style='margin-bottom:0; font-size:18px;'>Total Ratings</p>"
+        f"<p style='margin-top:0; font-size:28px; font-weight:bold;'>{ratings.shape[0]}</p></div>",
+        unsafe_allow_html=True,
+    )
+
+with col3:
+    st.markdown(
+        f"<div><p style='margin-bottom:0; font-size:18px;'>Unique Users</p>"
+        f"<p style='margin-top:0; font-size:28px; font-weight:bold;'>{ratings['userId'].nunique()}</p></div>",
+        unsafe_allow_html=True,
+    )
+
+st.subheader("🔝 Top 5 Most-Rated Movies")
 top5 = rating_agg.merge(movies[["movieId", "title"]], on="movieId")
 top5 = top5.sort_values("num_ratings", ascending=False).head(5)
+top5["Average Rating"] = top5["avg_rating"].apply(render_stars)
 top5_display = top5.rename(
-    columns={"num_ratings": "Number of Ratings", "avg_rating": "Average Rating"}
+    columns={
+        "title": "Title of Movie",
+        "num_ratings": "Number of Ratings",
+    }
 )
 st.table(
-    top5_display[["title", "Number of Ratings", "Average Rating"]].set_index("title")
+    top5_display[["Title of Movie", "Number of Ratings", "Average Rating"]].set_index(
+        "Title of Movie"
+    )
 )
 
 st.markdown("---")
 
-# --- Recommendations ---
+# Recommendations Section
 st.header("🔍 Find Similar Movies")
 movie_name = st.text_input(
     "Enter a movie you like:", placeholder="e.g. The Dark Knight"
@@ -242,19 +255,32 @@ if movie_name:
         display_n = min(5, len(recs))
         st.subheader(f"Top {display_n} recommendations for **{movie_name}**")
 
-        # Poster grid
-        cols = st.columns(display_n)
+        cols = st.columns(display_n)  # Poster grid
         for col, rec in zip(cols, recs[:display_n]):
             title, genres, score, year = rec
+            genres_display = " | ".join(genres.split("|"))
+            stars = render_stars(min_rating)
             with col:
                 poster = tmdb_search_poster(title, year, st.secrets["tmdb"]["api_key"])
                 st.image(poster, use_container_width=True)
                 st.markdown(f"**{title}**")
-                st.caption(f"{genres}\n⭐ {score:.2f}")
+                st.markdown(f"{genres_display}", unsafe_allow_html=True)
+                st.markdown(
+                    f"{stars} • Similarity: {score*100:.2f}%", unsafe_allow_html=True
+                )
 
         # Full top 10 recommendations table
         st.subheader("All Top 10 Candidates")
         df_out = pd.DataFrame(
-            [{"Title": r[0], "Genres": r[1], "Similarity": r[2]} for r in recs]
+            [
+                {
+                    "Sl. no.": i + 1,
+                    "Title": r[0],
+                    "Genres": " | ".join(r[1].split("|")),
+                    "Similarity (%)": f"{r[2]*100:.2f}%",
+                    "Rating": render_stars(min_rating),  # Unicode stars
+                }
+                for i, r in enumerate(recs)
+            ]
         )
-        st.dataframe(df_out)
+        st.dataframe(df_out.set_index("Sl. no."))
