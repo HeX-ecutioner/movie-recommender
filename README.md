@@ -106,7 +106,7 @@ The app automatically downloads the dataset if not present.
 
 ### ⚖️ License
 
-![MIT License](LICENSE)
+[MIT License](LICENSE)
 
 ### 🤝 Acknowledgements
 
