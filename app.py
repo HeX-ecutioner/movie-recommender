@@ -1,17 +1,36 @@
 import os
-import streamlit as st
-import pandas as pd
-import requests
 import re
-from sklearn.preprocessing import MultiLabelBinarizer
-from sklearn.metrics.pairwise import cosine_similarity
-from difflib import SequenceMatcher
+import base64
+import requests
+import pandas as pd
+import streamlit as st
 from PIL import Image
 from io import BytesIO
+from difflib import SequenceMatcher
+from sklearn.preprocessing import MultiLabelBinarizer
+from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(page_title="Movie Recommender", layout="wide")
-st.title("🎬 Movie Recommender System")
+st.set_page_config(
+    page_title="Movie Recommender System", page_icon="assets/icon.jpg", layout="wide"
+)
 
+
+def get_base64_of_bin_file(bin_file):
+    with open(bin_file, "rb") as f:
+        data = f.read()
+    return base64.b64encode(data).decode()
+
+
+# Display title with image on the right
+st.markdown(
+    f"""
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+        <h1 style="margin:0;">🎬 Movie Recommender System</h1>
+        <img src="data:image/png;base64,{get_base64_of_bin_file("assets/icon.jpg")}" width="160" style="margin-left:20px;">
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
 
 # Utility functions
 def clean_title(title):
@@ -284,3 +303,10 @@ if movie_name:
             ]
         )
         st.dataframe(df_out.set_index("Sl. no."))
+
+# Footer
+st.markdown(
+    """<hr style="margin-top:50px; margin-bottom:10px;">
+    <div style="text-align:right; color:gray; font-size:14px;">🎬 Movie Recommender System • Built with Python using Streamlit</div>""",
+    unsafe_allow_html=True,
+)
