@@ -16,10 +16,9 @@ A simple **content-based movie recommender** built with Python and Streamlit. En
 
 ---
 
-## Demo Screenshots
+## Demo Screenshot
 
-![App Screenshot](assets/Screenshot1.png)
-![App Screenshot](assets/Screenshot2.png)
+![App Screenshot](screenshots/Screenshot1.png)
 *Example layout showing top recommendations with posters.*
 
 ---
