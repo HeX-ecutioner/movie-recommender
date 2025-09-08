@@ -32,6 +32,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # Utility functions
 def clean_title(title):
     return re.sub(r"\(\d{4}\)", "", title).strip()
@@ -231,21 +232,34 @@ with col3:
         unsafe_allow_html=True,
     )
 
+# Top 5 Most-Rated Movies
 st.subheader("🔝 Top 5 Most-Rated Movies")
 top5 = rating_agg.merge(movies[["movieId", "title"]], on="movieId")
 top5 = top5.sort_values("num_ratings", ascending=False).head(5)
 top5["Average Rating"] = top5["avg_rating"].apply(render_stars)
-top5_display = top5.rename(
-    columns={
-        "title": "Title of Movie",
-        "num_ratings": "Number of Ratings",
-    }
-)
-st.table(
-    top5_display[["Title of Movie", "Number of Ratings", "Average Rating"]].set_index(
-        "Title of Movie"
+
+# Build custom HTML table
+table_html = "<table style='border-collapse: collapse; width: auto;'>"
+# Header
+table_html += "<tr>"
+for col in ["Title of Movie", "Number of Ratings", "Average Rating"]:
+    table_html += f"<th style='text-align: left; padding: 8px;'>{col}</th>"
+table_html += "</tr>"
+# Rows
+for _, row in top5.iterrows():
+    table_html += "<tr>"
+    table_html += f"<td style='text-align: left; padding: 8px;'>{row['title']}</td>"
+    table_html += (
+        f"<td style='text-align: left; padding: 8px;'>{row['num_ratings']}</td>"
     )
-)
+    table_html += (
+        f"<td style='text-align: left; padding: 8px;'>{row['Average Rating']}</td>"
+    )
+    table_html += "</tr>"
+table_html += "</table>"
+
+st.markdown(f"<div style='overflow-x:auto;'>{table_html}</div>", unsafe_allow_html=True)
+
 
 st.markdown("---")
 
