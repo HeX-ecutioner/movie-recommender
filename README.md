@@ -35,7 +35,7 @@ A simple **content-based movie recommender** built with Python and Streamlit. En
 1. Clone this repository:
 
 ```bash
-git clone https://github.com/yourusername/movie-recommender.git
+git clone https://github.com/HeX-ecutioner/movie-recommender.git
 cd movie-recommender
 ```
 
@@ -99,7 +99,6 @@ The app automatically downloads the dataset if not present.
 
 - streamlit
 - pandas
-- numpy
 - scikit-learn
 - requests
 - pillow
