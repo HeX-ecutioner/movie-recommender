@@ -1,9 +1,13 @@
 import os
 import re
 import base64
+import zipfile
+import tempfile
 import requests
+import numpy as np
 import pandas as pd
 import streamlit as st
+import urllib.request
 from PIL import Image
 from io import BytesIO
 from difflib import SequenceMatcher
@@ -14,6 +18,8 @@ st.set_page_config(
     page_title="Movie Recommender System", page_icon="assets/icon.jpg", layout="wide"
 )
 
+# Utility functions
+
 
 def get_base64_of_bin_file(bin_file):
     with open(bin_file, "rb") as f:
@@ -21,19 +27,6 @@ def get_base64_of_bin_file(bin_file):
     return base64.b64encode(data).decode()
 
 
-# Display title with image on the right
-st.markdown(
-    f"""
-    <div style="display:flex; align-items:center; justify-content:space-between;">
-        <h1 style="margin:0;">🎬 Movie Recommender System</h1>
-        <img src="data:image/png;base64,{get_base64_of_bin_file("assets/icon.jpg")}" width="160" style="margin-left:20px;">
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-
-# Utility functions
 def clean_title(title):
     return re.sub(r"\(\d{4}\)", "", title).strip()
 
@@ -60,11 +53,14 @@ def render_stars(rating: float) -> str:
     return "★" * full + ("⯨" if half else "") + "☆" * empty
 
 
-def tmdb_search_poster(title, year, tmdb_api_key):
+# TMDb Poster Fetching (Cloud-safe)
+@st.cache_data(show_spinner=False)
+def fetch_poster_bytes(title, year, tmdb_api_key):
+    """Fetch poster from TMDb and return bytes. Returns placeholder if failed."""
     try:
         clean = clean_title(title)
         params = {"api_key": tmdb_api_key, "query": clean, "include_adult": False}
-        if not pd.isna(year):
+        if year and not pd.isna(year):
             params["year"] = int(year)
 
         resp = requests.get(
@@ -85,25 +81,28 @@ def tmdb_search_poster(title, year, tmdb_api_key):
         if match and match.get("poster_path"):
             url = f"https://image.tmdb.org/t/p/w300{match['poster_path']}"
             img_data = requests.get(url, timeout=5).content
-            return Image.open(BytesIO(img_data))
+            return img_data
 
-        return Image.open("assets/no_poster.png")
+    except Exception as e:
+        st.warning(f"TMDb fetch failed for '{title}': {e}")
 
-    except Exception:
-        return Image.open("assets/no_poster.png")
+    placeholder_path = os.path.join("assets", "no_poster.png")  # fallback placeholder
+    with open(placeholder_path, "rb") as f:
+        return f.read()
 
 
-# Load MovieLens data
-@st.cache_data
-def download_movielens_small(dest_path="./data"):
-    os.makedirs(dest_path, exist_ok=True)
+def get_image_from_bytes(img_bytes):
+    return Image.open(BytesIO(img_bytes))
+
+
+# MovieLens Data Handling
+@st.cache_data(show_spinner=False)
+def download_movielens_small():
+    dest_path = tempfile.gettempdir()
     movies_path = os.path.join(dest_path, "movies.csv")
     ratings_path = os.path.join(dest_path, "ratings.csv")
     if os.path.exists(movies_path) and os.path.exists(ratings_path):
         return movies_path, ratings_path
-
-    import zipfile
-    import urllib.request
 
     url = "https://files.grouplens.org/datasets/movielens/ml-latest-small.zip"
     zip_path = os.path.join(dest_path, "ml-latest-small.zip")
@@ -121,7 +120,7 @@ def download_movielens_small(dest_path="./data"):
     return movies_path, ratings_path
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def load_data():
     movies_path, ratings_path = download_movielens_small()
     movies = pd.read_csv(movies_path)
@@ -133,7 +132,7 @@ def load_data():
     return movies, ratings
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def build_genre_matrix(movies_df):
     def split_genres(s):
         return [] if s == "(no genres listed)" else s.split("|")
@@ -146,18 +145,21 @@ def build_genre_matrix(movies_df):
     return genre_matrix
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def compute_similarity(genre_matrix):
-    return cosine_similarity(genre_matrix.fillna(0))
+    return cosine_similarity(
+        genre_matrix.fillna(0).astype(np.float32)
+    )  # Use float32 to reduce memory usage
 
 
-@st.cache_data
+@st.cache_data(show_spinner=False)
 def aggregate_ratings(ratings_df):
     agg = ratings_df.groupby("movieId").rating.agg(["mean", "count"]).reset_index()
     agg.rename(columns={"mean": "avg_rating", "count": "num_ratings"}, inplace=True)
     return agg
 
 
+# Recommendation Engine
 def recommend_by_genre(
     movie_title,
     movies_df,
@@ -202,7 +204,18 @@ def recommend_by_genre(
     return recommendations
 
 
-# Main App Logic
+# Header with icon
+st.markdown(
+    f"""
+    <div style="display:flex; align-items:center; justify-content:space-between;">
+        <h1 style="margin:0;">🎬 Movie Recommender System</h1>
+        <img src="data:image/png;base64,{get_base64_of_bin_file('assets/icon.jpg')}" width="160" style="margin-left:20px;">
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Load data
 movies, ratings = load_data()
 rating_agg = aggregate_ratings(ratings)
 genre_matrix = build_genre_matrix(movies)
@@ -213,57 +226,37 @@ col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown(
-        f"<div><p style='margin-bottom:0; font-size:18px;'>Total Movies</p>"
-        f"<p style='margin-top:0; font-size:28px; font-weight:bold;'>{movies.shape[0]}</p></div>",
+        f"<p style='font-size:18px;'>Total Movies</p><p style='font-size:28px; font-weight:bold;'>{movies.shape[0]}</p>",
         unsafe_allow_html=True,
     )
-
 with col2:
     st.markdown(
-        f"<div><p style='margin-bottom:0; font-size:18px;'>Total Ratings</p>"
-        f"<p style='margin-top:0; font-size:28px; font-weight:bold;'>{ratings.shape[0]}</p></div>",
+        f"<p style='font-size:18px;'>Total Ratings</p><p style='font-size:28px; font-weight:bold;'>{ratings.shape[0]}</p>",
         unsafe_allow_html=True,
     )
-
 with col3:
     st.markdown(
-        f"<div><p style='margin-bottom:0; font-size:18px;'>Unique Users</p>"
-        f"<p style='margin-top:0; font-size:28px; font-weight:bold;'>{ratings['userId'].nunique()}</p></div>",
+        f"<p style='font-size:18px;'>Unique Users</p><p style='font-size:28px; font-weight:bold;'>{ratings['userId'].nunique()}</p>",
         unsafe_allow_html=True,
     )
 
-# Top 5 Most-Rated Movies
+# Top 5 most-rated movies
 st.subheader("🔝 Top 5 Most-Rated Movies")
 top5 = rating_agg.merge(movies[["movieId", "title"]], on="movieId")
 top5 = top5.sort_values("num_ratings", ascending=False).head(5)
 top5["Average Rating"] = top5["avg_rating"].apply(render_stars)
 
-# Build custom HTML table
 table_html = "<table style='border-collapse: collapse; width: auto;'>"
-# Header
-table_html += "<tr>"
-for col in ["Title of Movie", "Number of Ratings", "Average Rating"]:
-    table_html += f"<th style='text-align: left; padding: 8px;'>{col}</th>"
-table_html += "</tr>"
-# Rows
+table_html += (
+    "<tr><th>Title of Movie</th><th>Number of Ratings</th><th>Average Rating</th></tr>"
+)
 for _, row in top5.iterrows():
-    table_html += "<tr>"
-    table_html += f"<td style='text-align: left; padding: 8px;'>{row['title']}</td>"
-    table_html += (
-        f"<td style='text-align: left; padding: 8px;'>{row['num_ratings']}</td>"
-    )
-    table_html += (
-        f"<td style='text-align: left; padding: 8px;'>{row['Average Rating']}</td>"
-    )
-    table_html += "</tr>"
+    table_html += f"<tr><td>{row['title']}</td><td>{row['num_ratings']}</td><td>{row['Average Rating']}</td></tr>"
 table_html += "</table>"
-
 st.markdown(f"<div style='overflow-x:auto;'>{table_html}</div>", unsafe_allow_html=True)
-
-
 st.markdown("---")
 
-# Recommendations Section
+# Recommendations
 st.header("🔍 Find Similar Movies")
 movie_name = st.text_input(
     "Enter a movie you like:", placeholder="e.g. The Dark Knight"
@@ -288,22 +281,22 @@ if movie_name:
         display_n = min(5, len(recs))
         st.subheader(f"Top {display_n} recommendations for **{movie_name}**")
 
-        cols = st.columns(display_n)  # Poster grid
+        cols = st.columns(display_n)
         for col, rec in zip(cols, recs[:display_n]):
             title, genres, score, year = rec
-            genres_display = " | ".join(genres.split("|"))
-            stars = render_stars(min_rating)
             with col:
-                poster = tmdb_search_poster(title, year, st.secrets["tmdb"]["api_key"])
-                st.image(poster, use_container_width=True)
+                poster_bytes = fetch_poster_bytes(
+                    title, year, st.secrets["tmdb"]["api_key"]
+                )
+                st.image(get_image_from_bytes(poster_bytes), use_container_width=True)
                 st.markdown(f"**{title}**")
-                st.markdown(f"{genres_display}", unsafe_allow_html=True)
+                st.markdown(f"{' | '.join(genres.split('|'))}", unsafe_allow_html=True)
                 st.markdown(
-                    f"{stars} • Similarity: {score*100:.2f}%", unsafe_allow_html=True
+                    f"{render_stars(min_rating)} • Similarity: {score*100:.2f}%",
+                    unsafe_allow_html=True,
                 )
 
-        # Full top 10 recommendations table
-        st.subheader("All Top 10 Candidates")
+        # Full top 10 table
         df_out = pd.DataFrame(
             [
                 {
@@ -311,7 +304,7 @@ if movie_name:
                     "Title": r[0],
                     "Genres": " | ".join(r[1].split("|")),
                     "Similarity (%)": f"{r[2]*100:.2f}%",
-                    "Rating": render_stars(min_rating),  # Unicode stars
+                    "Rating": render_stars(min_rating),
                 }
                 for i, r in enumerate(recs)
             ]
