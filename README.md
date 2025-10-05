@@ -98,6 +98,7 @@ The app automatically downloads the dataset if not present.
 ### 📦 Dependencies
 
 - streamlit
+- numpy
 - pandas
 - scikit-learn
 - requests
@@ -112,7 +113,3 @@ The app automatically downloads the dataset if not present.
 - MovieLens dataset
 - TMDB API
 - Built with Streamlit
-
-### ⚠️ Warning
-
-Currently this application cannot be hosted on Streamlit as free hosting servers have very limited resources to utilize. The app will work perfectly fine locally. Updates to fix the problem will be rolled out shortly 🙏
