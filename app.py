@@ -14,9 +14,8 @@ from difflib import SequenceMatcher
 from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics.pairwise import cosine_similarity
 
-st.set_page_config(
-    page_title="Movie Recommender System", page_icon="🎬", layout="wide"
-)
+st.set_page_config(page_title="Movie Recommender System", page_icon="🎬", layout="wide")
+
 
 # Utility functions
 def get_base64_of_bin_file(bin_file):
@@ -27,8 +26,10 @@ def get_base64_of_bin_file(bin_file):
     except:
         return ""
 
+
 def clean_title(title):
     return re.sub(r"\(\d{4}\)", "", title).strip()
+
 
 def best_match(results, clean_title, year=None):
     if not results:
@@ -43,6 +44,7 @@ def best_match(results, clean_title, year=None):
         if score > best_score:
             best, best_score = r, score
     return best
+
 
 def render_stars(rating: float) -> str:
     full = int(rating)
@@ -82,13 +84,14 @@ def fetch_poster_bytes(title, year, tmdb_api_key):
             return img_data
 
     except Exception as e:
-        pass # Silently fail and use placeholder
+        pass  # Silently fail and use placeholder
 
     # Fallback to an empty grey placeholder if no image exists
-    img = Image.new('RGB', (300, 450), color = (73, 109, 137))
+    img = Image.new("RGB", (300, 450), color=(73, 109, 137))
     buf = BytesIO()
     img.save(buf, format="PNG")
     return buf.getvalue()
+
 
 def get_image_from_bytes(img_bytes):
     return Image.open(BytesIO(img_bytes))
@@ -133,12 +136,13 @@ def load_data():
 
 # --- HYBRID RECOMENDER CORE LOGIC ---
 
+
 # 1. Content-Based Matrix (Genres)
 @st.cache_data(show_spinner=False)
 def compute_content_similarity(movies_df):
     def split_genres(s):
         return [] if s == "(no genres listed)" else s.split("|")
-    
+
     genres_list = movies_df["genres"].apply(split_genres)
     mlb = MultiLabelBinarizer()
     genre_matrix = pd.DataFrame(
@@ -146,22 +150,40 @@ def compute_content_similarity(movies_df):
     )
     return cosine_similarity(genre_matrix.fillna(0).astype(np.float32))
 
+
 # 2. Collaborative Matrix (User Ratings)
 @st.cache_data(show_spinner=False)
 def compute_collaborative_similarity(movies_df, ratings_df):
-    # Pivot rows=movieId, cols=userId, values=ratings
-    item_user_matrix = ratings_df.pivot(index='movieId', columns='userId', values='rating')
-    
-    # Reindex the matrix so it aligns perfectly with the movies_df dataframe indices!
-    aligned_matrix = item_user_matrix.reindex(movies_df['movieId']).fillna(0)
-    
-    # Compute similarity between movies based on user rating patterns
-    return cosine_similarity(aligned_matrix.astype(np.float32))
+    item_user_matrix = ratings_df.pivot(
+        index="movieId", columns="userId", values="rating"
+    )
+
+    # Align with movies_df order
+    aligned_matrix = item_user_matrix.reindex(movies_df["movieId"])
+
+    # Normalize ratings (subtract mean per movie)
+    normalized = aligned_matrix.sub(aligned_matrix.mean(axis=1), axis=0)
+
+    # Fill NaN after normalization
+    normalized = normalized.fillna(0)
+
+    return cosine_similarity(normalized.astype(np.float32))
+
 
 @st.cache_data(show_spinner=False)
 def aggregate_ratings(ratings_df):
     agg = ratings_df.groupby("movieId").rating.agg(["mean", "count"]).reset_index()
     agg.rename(columns={"mean": "avg_rating", "count": "num_ratings"}, inplace=True)
+
+    # Compute global mean
+    C = agg["avg_rating"].mean()
+    m = agg["num_ratings"].quantile(0.6)
+
+    # Weighted rating (IMDb formula)
+    agg["weighted_rating"] = (agg["num_ratings"] / (agg["num_ratings"] + m)) * agg[
+        "avg_rating"
+    ] + (m / (agg["num_ratings"] + m)) * C
+
     return agg
 
 
@@ -178,35 +200,47 @@ def recommend_hybrid(
 ):
     titles = movies_df["title_clean"]
     exact_matches = movies_df[titles.str.lower() == movie_title.strip().lower()]
+
     if not exact_matches.empty:
         idx = exact_matches.index[0]
+
     else:
+        # Step 2: Partial match
         contains = movies_df[
             titles.str.lower().str.contains(movie_title.strip().lower(), na=False)
-        ]
-        if contains.empty:
+        ].copy()
+
+        if contains.shape[0] == 0:
             return []
-        idx = contains.index[0]
+
+        # Step 3: Rank by similarity
+        contains["match_score"] = contains["title_clean"].apply(
+            lambda x: SequenceMatcher(None, movie_title.lower(), x.lower()).ratio()
+        )
+
+        idx = contains.sort_values("match_score", ascending=False).index[0]
 
     # Combine scores dynamically based on the slider weight
     cf_weight = 1.0 - content_weight
-    hybrid_scores = (content_weight * content_sim_matrix[idx]) + (cf_weight * cf_sim_matrix[idx])
-    
+    hybrid_scores = (content_weight * content_sim_matrix[idx]) + (
+        cf_weight * cf_sim_matrix[idx]
+    )
+
     sim_scores = list(enumerate(hybrid_scores))
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-    
+
     recommendations = []
     for i, score in sim_scores:
         if i == idx:
             continue
         movieid = movies_df.loc[i, "movieId"]
-        
+
         # Rating Filter Guard
         if min_avg_rating and rating_agg is not None:
             row = rating_agg[rating_agg.movieId == movieid]
-            if row.empty or row.iloc[0].avg_rating < min_avg_rating:
+            if row.empty or row.iloc[0].weighted_rating < min_avg_rating:
                 continue
-                
+
         recommendations.append(
             (
                 movies_df.loc[i, "title"],
@@ -225,6 +259,8 @@ st.markdown(
     f"""
     <div style="display:flex; align-items:center; justify-content:space-between;">
         <h1 style="margin:0;">🎬 Movie Recommender System</h1>
+        <img src="data:image/png;base64,{get_base64_of_bin_file('assets/icon.jpg')}" 
+             width="160" style="margin-left:20px;border-radius:10px;">
     </div>
     <br>
     """,
@@ -264,13 +300,13 @@ top5 = top5.sort_values("num_ratings", ascending=False).head(5)
 top5["Average Rating"] = top5["avg_rating"].apply(render_stars)
 
 table_html = "<table style='border-collapse: collapse; width: 100%;'>"
-table_html += (
-    "<tr style='background-color:#1e1e1e; text-align:left;'><th>Title of Movie</th><th>Number of Ratings</th><th>Average Rating</th></tr>"
-)
+table_html += "<tr style='background-color:#1e1e1e; text-align:left;'><th>Title of Movie</th><th>Number of Ratings</th><th>Average Rating</th></tr>"
 for _, row in top5.iterrows():
     table_html += f"<tr><td>{row['title']}</td><td>{row['num_ratings']}</td><td>{row['Average Rating']}</td></tr>"
 table_html += "</table>"
-st.markdown(f"<div style='overflow-x:auto;'>{table_html}</div><br>", unsafe_allow_html=True)
+st.markdown(
+    f"<div style='overflow-x:auto;'>{table_html}</div><br>", unsafe_allow_html=True
+)
 st.markdown("---")
 
 
@@ -285,7 +321,8 @@ with col_input:
     )
 
 with col_filters:
-    min_rating = st.slider("Filter by minimum average rating", 0.0, 5.0, 3.5, 0.1)
+    min_rating = st.slider("Minimum Rating", 0.0, 5.0, 3.5, 0.1)
+    content_weight = st.slider("Content vs Collaborative", 0.0, 1.0, 0.5, 0.05)
 
 if movie_name:
     # Notice we don't pass content_weight anymore, so it uses the 0.5 (balanced) default
@@ -294,6 +331,7 @@ if movie_name:
         movies_df=movies,
         content_sim_matrix=content_sim,
         cf_sim_matrix=cf_sim,
+        content_weight=content_weight,
         top_n=10,
         min_avg_rating=min_rating,
         rating_agg=rating_agg,
@@ -314,14 +352,18 @@ if movie_name:
                 # Add your TMDB API Key into `.streamlit/secrets.toml` as [tmdb] api_key="YOUR_KEY"
                 # For safety, defaulting to "" if it's missing so the app doesn't crash
                 api_key = st.secrets["tmdb"]["api_key"] if "tmdb" in st.secrets else ""
-                
+
                 poster_bytes = fetch_poster_bytes(title, year, api_key)
                 st.image(get_image_from_bytes(poster_bytes), use_container_width=True)
-                
+
                 st.markdown(f"**{title}**")
                 st.caption(f"{' | '.join(genres.split('|'))}")
+                movieid = movies.loc[movies["title"] == title, "movieId"].values[0]
+                row = rating_agg[rating_agg.movieId == movieid]
+                actual_rating = row.iloc[0].avg_rating if not row.empty else 0
+
                 st.markdown(
-                    f"<small>{render_stars(min_rating)}<br><b>Match: {score*100:.1f}%</b></small>",
+                    f"<small>{render_stars(actual_rating)}<br><b>Match: {score*100:.1f}%</b></small>",
                     unsafe_allow_html=True,
                 )
 
