@@ -15,21 +15,20 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(
-    page_title="Movie Recommender System", page_icon="assets/icon.jpg", layout="wide"
+    page_title="Movie Recommender System", page_icon="🎬", layout="wide"
 )
 
 # Utility functions
-
-
 def get_base64_of_bin_file(bin_file):
-    with open(bin_file, "rb") as f:
-        data = f.read()
-    return base64.b64encode(data).decode()
-
+    try:
+        with open(bin_file, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode()
+    except:
+        return ""
 
 def clean_title(title):
     return re.sub(r"\(\d{4}\)", "", title).strip()
-
 
 def best_match(results, clean_title, year=None):
     if not results:
@@ -39,12 +38,11 @@ def best_match(results, clean_title, year=None):
         tmdb_title = r.get("title", "")
         score = SequenceMatcher(None, clean_title.lower(), tmdb_title.lower()).ratio()
         if year and "release_date" in r and r["release_date"]:
-            if str(year) in r["release_date"]:
+            if str(int(year)) in r["release_date"]:
                 score += 0.1
         if score > best_score:
             best, best_score = r, score
     return best
-
 
 def render_stars(rating: float) -> str:
     full = int(rating)
@@ -84,12 +82,13 @@ def fetch_poster_bytes(title, year, tmdb_api_key):
             return img_data
 
     except Exception as e:
-        st.warning(f"TMDb fetch failed for '{title}': {e}")
+        pass # Silently fail and use placeholder
 
-    placeholder_path = os.path.join("assets", "no_poster.png")  # fallback placeholder
-    with open(placeholder_path, "rb") as f:
-        return f.read()
-
+    # Fallback to an empty grey placeholder if no image exists
+    img = Image.new('RGB', (300, 450), color = (73, 109, 137))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
 
 def get_image_from_bytes(img_bytes):
     return Image.open(BytesIO(img_bytes))
@@ -132,25 +131,32 @@ def load_data():
     return movies, ratings
 
 
+# --- HYBRID RECOMENDER CORE LOGIC ---
+
+# 1. Content-Based Matrix (Genres)
 @st.cache_data(show_spinner=False)
-def build_genre_matrix(movies_df):
+def compute_content_similarity(movies_df):
     def split_genres(s):
         return [] if s == "(no genres listed)" else s.split("|")
-
+    
     genres_list = movies_df["genres"].apply(split_genres)
     mlb = MultiLabelBinarizer()
     genre_matrix = pd.DataFrame(
         mlb.fit_transform(genres_list), columns=mlb.classes_, index=movies_df.index
     )
-    return genre_matrix
+    return cosine_similarity(genre_matrix.fillna(0).astype(np.float32))
 
-
+# 2. Collaborative Matrix (User Ratings)
 @st.cache_data(show_spinner=False)
-def compute_similarity(genre_matrix):
-    return cosine_similarity(
-        genre_matrix.fillna(0).astype(np.float32)
-    )  # Use float32 to reduce memory usage
-
+def compute_collaborative_similarity(movies_df, ratings_df):
+    # Pivot rows=movieId, cols=userId, values=ratings
+    item_user_matrix = ratings_df.pivot(index='movieId', columns='userId', values='rating')
+    
+    # Reindex the matrix so it aligns perfectly with the movies_df dataframe indices!
+    aligned_matrix = item_user_matrix.reindex(movies_df['movieId']).fillna(0)
+    
+    # Compute similarity between movies based on user rating patterns
+    return cosine_similarity(aligned_matrix.astype(np.float32))
 
 @st.cache_data(show_spinner=False)
 def aggregate_ratings(ratings_df):
@@ -159,11 +165,13 @@ def aggregate_ratings(ratings_df):
     return agg
 
 
-# Recommendation Engine
-def recommend_by_genre(
+# 3. Hybrid Engine Combines Both Matrices
+def recommend_hybrid(
     movie_title,
     movies_df,
-    similarity_matrix,
+    content_sim_matrix,
+    cf_sim_matrix,
+    content_weight=0.5,
     top_n=10,
     min_avg_rating=None,
     rating_agg=None,
@@ -180,17 +188,25 @@ def recommend_by_genre(
             return []
         idx = contains.index[0]
 
-    sim_scores = list(enumerate(similarity_matrix[idx]))
+    # Combine scores dynamically based on the slider weight
+    cf_weight = 1.0 - content_weight
+    hybrid_scores = (content_weight * content_sim_matrix[idx]) + (cf_weight * cf_sim_matrix[idx])
+    
+    sim_scores = list(enumerate(hybrid_scores))
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+    
     recommendations = []
     for i, score in sim_scores:
         if i == idx:
             continue
         movieid = movies_df.loc[i, "movieId"]
+        
+        # Rating Filter Guard
         if min_avg_rating and rating_agg is not None:
             row = rating_agg[rating_agg.movieId == movieid]
             if row.empty or row.iloc[0].avg_rating < min_avg_rating:
                 continue
+                
         recommendations.append(
             (
                 movies_df.loc[i, "title"],
@@ -203,23 +219,24 @@ def recommend_by_genre(
             break
     return recommendations
 
+# --- UI LAYOUT ---
 
-# Header with icon
 st.markdown(
     f"""
     <div style="display:flex; align-items:center; justify-content:space-between;">
         <h1 style="margin:0;">🎬 Movie Recommender System</h1>
-        <img src="data:image/png;base64,{get_base64_of_bin_file('assets/icon.jpg')}" width="160" style="margin-left:20px;">
     </div>
+    <br>
     """,
     unsafe_allow_html=True,
 )
 
-# Load data
-movies, ratings = load_data()
-rating_agg = aggregate_ratings(ratings)
-genre_matrix = build_genre_matrix(movies)
-similarity_matrix = compute_similarity(genre_matrix)
+# Load Data and Models
+with st.spinner("Loading Recommendation Engine..."):
+    movies, ratings = load_data()
+    rating_agg = aggregate_ratings(ratings)
+    content_sim = compute_content_similarity(movies)
+    cf_sim = compute_collaborative_similarity(movies, ratings)
 
 st.header("📊 Data Exploration")
 col1, col2, col3 = st.columns(3)
@@ -246,28 +263,37 @@ top5 = rating_agg.merge(movies[["movieId", "title"]], on="movieId")
 top5 = top5.sort_values("num_ratings", ascending=False).head(5)
 top5["Average Rating"] = top5["avg_rating"].apply(render_stars)
 
-table_html = "<table style='border-collapse: collapse; width: auto;'>"
+table_html = "<table style='border-collapse: collapse; width: 100%;'>"
 table_html += (
-    "<tr><th>Title of Movie</th><th>Number of Ratings</th><th>Average Rating</th></tr>"
+    "<tr style='background-color:#1e1e1e; text-align:left;'><th>Title of Movie</th><th>Number of Ratings</th><th>Average Rating</th></tr>"
 )
 for _, row in top5.iterrows():
     table_html += f"<tr><td>{row['title']}</td><td>{row['num_ratings']}</td><td>{row['Average Rating']}</td></tr>"
 table_html += "</table>"
-st.markdown(f"<div style='overflow-x:auto;'>{table_html}</div>", unsafe_allow_html=True)
+st.markdown(f"<div style='overflow-x:auto;'>{table_html}</div><br>", unsafe_allow_html=True)
 st.markdown("---")
 
-# Recommendations
+
+# Recommendations UI
 st.header("🔍 Find Similar Movies")
-movie_name = st.text_input(
-    "Enter a movie you like:", placeholder="e.g. The Dark Knight"
-)
-min_rating = st.slider("Filter by minimum average rating", 0.0, 5.0, 3.5, 0.1)
+
+col_input, col_filters = st.columns([2, 1])
+
+with col_input:
+    movie_name = st.text_input(
+        "Enter a movie you like:", placeholder="e.g. The Dark Knight"
+    )
+
+with col_filters:
+    min_rating = st.slider("Filter by minimum average rating", 0.0, 5.0, 3.5, 0.1)
 
 if movie_name:
-    recs = recommend_by_genre(
-        movie_name,
-        movies,
-        similarity_matrix,
+    # Notice we don't pass content_weight anymore, so it uses the 0.5 (balanced) default
+    recs = recommend_hybrid(
+        movie_title=movie_name,
+        movies_df=movies,
+        content_sim_matrix=content_sim,
+        cf_sim_matrix=cf_sim,
         top_n=10,
         min_avg_rating=min_rating,
         rating_agg=rating_agg,
@@ -285,35 +311,38 @@ if movie_name:
         for col, rec in zip(cols, recs[:display_n]):
             title, genres, score, year = rec
             with col:
-                poster_bytes = fetch_poster_bytes(
-                    title, year, st.secrets["tmdb"]["api_key"]
-                )
+                # Add your TMDB API Key into `.streamlit/secrets.toml` as [tmdb] api_key="YOUR_KEY"
+                # For safety, defaulting to "" if it's missing so the app doesn't crash
+                api_key = st.secrets["tmdb"]["api_key"] if "tmdb" in st.secrets else ""
+                
+                poster_bytes = fetch_poster_bytes(title, year, api_key)
                 st.image(get_image_from_bytes(poster_bytes), use_container_width=True)
+                
                 st.markdown(f"**{title}**")
-                st.markdown(f"{' | '.join(genres.split('|'))}", unsafe_allow_html=True)
+                st.caption(f"{' | '.join(genres.split('|'))}")
                 st.markdown(
-                    f"{render_stars(min_rating)} • Similarity: {score*100:.2f}%",
+                    f"<small>{render_stars(min_rating)}<br><b>Match: {score*100:.1f}%</b></small>",
                     unsafe_allow_html=True,
                 )
 
         # Full top 10 table
+        st.markdown("<br><b>Top 10 Detailed View</b>", unsafe_allow_html=True)
         df_out = pd.DataFrame(
             [
                 {
-                    "Sl. no.": i + 1,
+                    "Rank": i + 1,
                     "Title": r[0],
                     "Genres": " | ".join(r[1].split("|")),
-                    "Similarity (%)": f"{r[2]*100:.2f}%",
-                    "Rating": render_stars(min_rating),
+                    "Match (%)": f"{r[2]*100:.2f}%",
                 }
                 for i, r in enumerate(recs)
             ]
         )
-        st.dataframe(df_out.set_index("Sl. no."))
+        st.dataframe(df_out.set_index("Rank"), use_container_width=True)
 
 # Footer
 st.markdown(
     """<hr style="margin-top:50px; margin-bottom:10px;">
-    <div style="text-align:right; color:gray; font-size:14px;">🎬 Movie Recommender System • Built with Python using Streamlit</div>""",
+    <div style="text-align:right; color:gray; font-size:14px;">🎬 Movie Recommender System • Built with Python & Streamlit</div>""",
     unsafe_allow_html=True,
 )
