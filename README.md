@@ -1,27 +1,46 @@
 # 🎬 Movie Recommender System
 
-A simple **content-based movie recommender** built with Python and Streamlit. Enter a movie you like, and the app recommends similar movies along with their posters fetched from **TMDB**.
-
----
+A **hybrid movie recommender system** with content-based + collaborative filtering, built with Python and Streamlit. Enter a movie you like, and the app recommends similar movies along with their posters fetched from **TMDB**.
 
 ## ✨ Features
 
 - 🎥 **MovieLens Small Dataset** integration (movies + ratings)  
-- 🤖 **Content-based recommendations** using genre similarity  
-- ⭐ **Top-rated movies table** and **data exploration metrics**  
-- 🖼️ **Poster display** for top recommendations using TMDB API  
-- 🎚️ **Minimum rating filter** directly in the main UI  
-- 📊 **Full top 10 recommendation table**  
-- 🖌️ Clean and polished **Streamlit UI** with grid layout  
+- 🤖 **Hybrid recommendation system** (content-based + collaborative filtering)  
+- 🧠 **Cosine similarity** on genres + user rating patterns  
+- ⭐ **Weighted rating system (IMDb-style)** for better ranking  
+- 🎚️ **Adjustable hybrid slider** (content vs collaborative balance)  
+- 🔍 **Smart movie matching** using fuzzy string similarity  
+- 🖼️ **Poster display** using TMDB API  
+- 📊 **Top-rated movies table** and dataset insights  
+- 🖌️ Clean and responsive **Streamlit UI**
 
----
+## 🧠 Recommendation Approach
+
+This app uses a **hybrid recommendation system**:
+
+- **Content-based filtering** → recommends movies with similar genres  
+- **Collaborative filtering** → recommends movies liked by similar users  
+- **Hybrid scoring** → combines both using a weighted formula:
+
+Final Score = (w × Content Similarity) + ((1 - w) × Collaborative Similarity)
+
+Users can adjust the balance using the **content vs collaborative slider** in the UI.
+
+## ⚙️ How It Works
+
+1. Loads MovieLens dataset and extracts genres & year.  
+2. Builds a **content-based model** using genre encoding and cosine similarity.  
+3. Builds a **collaborative filtering model** using user–movie rating matrix.  
+4. Normalizes ratings and computes similarity between movies based on user behavior.  
+5. Combines both models into a **hybrid recommender** using weighted scoring.  
+6. Applies **IMDb-style weighted rating filtering** for quality control.  
+7. Fetches movie posters from TMDB using cleaned titles and year.  
+8. Displays results in a poster grid and detailed recommendation table.
 
 ## 🖼️ Demo Screenshot
 
 ![App Screenshot](screenshots/Screenshot1.png)
 *Example layout showing top recommendations with posters.*
-
----
 
 ## 🚀 Getting Started
 
@@ -71,7 +90,7 @@ streamlit run app.py
 ```
 
 - Enter a movie title (partial or full) in the input box.
-- Adjust the minimum rating filter if desired.
+- Adjust the minimum rating filter and hybrid weight slider if desired.
 - View top 5 recommendations with posters and full top 10 table.
 
 ## ℹ️ Additional Information
@@ -87,17 +106,10 @@ Includes:
 
 The app automatically downloads the dataset if not present.
 
-### ⚙️ How It Works
-
-1. Loads MovieLens dataset and extracts genres & year.
-2. Builds a genre matrix and computes cosine similarity for content-based recommendations.
-3. Filters recommendations by minimum average rating (if selected).
-4. Fetches movie posters from TMDB using cleaned titles and year.
-5. Displays results in a poster grid and a full table.
-
 ### 📦 Dependencies
 
 - streamlit
+- numpy
 - pandas
 - scikit-learn
 - requests
@@ -105,14 +117,10 @@ The app automatically downloads the dataset if not present.
 
 ### ⚖️ License
 
-[MIT License](LICENSE)
+This app uses the [MIT License](LICENSE)
 
 ### 🤝 Acknowledgements
 
 - MovieLens dataset
 - TMDB API
 - Built with Streamlit
-
-### ⚠️ Warning
-
-Currently this application cannot be hosted on Streamlit as free hosting servers have very limited resources to utilize. The app will work perfectly fine locally. Updates to fix the problem will be rolled out shortly 🙏
