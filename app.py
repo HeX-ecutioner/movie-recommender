@@ -15,6 +15,7 @@ from sklearn.preprocessing import MultiLabelBinarizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(page_title="Movie Recommender System", page_icon="🎬", layout="wide")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 # Utility functions
@@ -97,9 +98,25 @@ def get_image_from_bytes(img_bytes):
     return Image.open(BytesIO(img_bytes))
 
 
+def get_tmdb_api_key():
+    """Return TMDB API key if configured; otherwise return empty string."""
+    try:
+        tmdb = st.secrets.get("tmdb", {})
+        return tmdb.get("api_key", "")
+    except Exception:
+        # Streamlit may raise if secrets.toml is missing entirely.
+        return ""
+
+
 # MovieLens Data Handling
 @st.cache_data(show_spinner=False)
 def download_movielens_small():
+    # Prefer repository-local dataset in cloud deployments.
+    local_movies = os.path.join(BASE_DIR, "data", "movies.csv")
+    local_ratings = os.path.join(BASE_DIR, "data", "ratings.csv")
+    if os.path.exists(local_movies) and os.path.exists(local_ratings):
+        return local_movies, local_ratings
+
     dest_path = tempfile.gettempdir()
     movies_path = os.path.join(dest_path, "movies.csv")
     ratings_path = os.path.join(dest_path, "ratings.csv")
@@ -137,9 +154,9 @@ def load_data():
 # --- HYBRID RECOMENDER CORE LOGIC ---
 
 
-# 1. Content-Based Matrix (Genres)
+# 1. Content-Based Features (Genres)
 @st.cache_data(show_spinner=False)
-def compute_content_similarity(movies_df):
+def compute_content_features(movies_df):
     def split_genres(s):
         return [] if s == "(no genres listed)" else s.split("|")
 
@@ -148,12 +165,12 @@ def compute_content_similarity(movies_df):
     genre_matrix = pd.DataFrame(
         mlb.fit_transform(genres_list), columns=mlb.classes_, index=movies_df.index
     )
-    return cosine_similarity(genre_matrix.fillna(0).astype(np.float32))
+    return genre_matrix.fillna(0).astype(np.float32).values
 
 
-# 2. Collaborative Matrix (User Ratings)
+# 2. Collaborative Features (User Ratings)
 @st.cache_data(show_spinner=False)
-def compute_collaborative_similarity(movies_df, ratings_df):
+def compute_collaborative_features(movies_df, ratings_df):
     item_user_matrix = ratings_df.pivot(
         index="movieId", columns="userId", values="rating"
     )
@@ -167,7 +184,7 @@ def compute_collaborative_similarity(movies_df, ratings_df):
     # Fill NaN after normalization
     normalized = normalized.fillna(0)
 
-    return cosine_similarity(normalized.astype(np.float32))
+    return normalized.astype(np.float32).values
 
 
 @st.cache_data(show_spinner=False)
@@ -191,12 +208,13 @@ def aggregate_ratings(ratings_df):
 def recommend_hybrid(
     movie_title,
     movies_df,
-    content_sim_matrix,
-    cf_sim_matrix,
+    content_features,
+    cf_features,
     content_weight=0.5,
-    top_n=10,
+    top_n=5,
     min_avg_rating=None,
     rating_agg=None,
+    require_full_results=True,
 ):
     titles = movies_df["title_clean"]
     exact_matches = movies_df[titles.str.lower() == movie_title.strip().lower()]
@@ -220,11 +238,15 @@ def recommend_hybrid(
 
         idx = contains.sort_values("match_score", ascending=False).index[0]
 
-    # Combine scores dynamically based on the slider weight
+    # Compute similarity vectors on demand to avoid huge NxN matrices.
+    content_scores = cosine_similarity(
+        content_features[idx : idx + 1], content_features
+    ).ravel()
+    cf_scores = cosine_similarity(cf_features[idx : idx + 1], cf_features).ravel()
+
+    # Combine scores dynamically based on the slider weight.
     cf_weight = 1.0 - content_weight
-    hybrid_scores = (content_weight * content_sim_matrix[idx]) + (
-        cf_weight * cf_sim_matrix[idx]
-    )
+    hybrid_scores = (content_weight * content_scores) + (cf_weight * cf_scores)
 
     sim_scores = list(enumerate(hybrid_scores))
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
@@ -251,6 +273,10 @@ def recommend_hybrid(
         )
         if len(recommendations) >= top_n:
             break
+
+    if require_full_results and len(recommendations) < top_n:
+        return []
+
     return recommendations
 
 # --- UI LAYOUT ---
@@ -259,7 +285,7 @@ st.markdown(
     f"""
     <div style="display:flex; align-items:center; justify-content:space-between;">
         <h1 style="margin:0;">🎬 Movie Recommender System</h1>
-        <img src="data:image/png;base64,{get_base64_of_bin_file('assets/icon.jpg')}" 
+        <img src="data:image/png;base64,{get_base64_of_bin_file(os.path.join(BASE_DIR, 'assets', 'icon.jpg'))}" 
              width="160" style="margin-left:20px;border-radius:10px;">
     </div>
     <br>
@@ -271,8 +297,8 @@ st.markdown(
 with st.spinner("Loading Recommendation Engine..."):
     movies, ratings = load_data()
     rating_agg = aggregate_ratings(ratings)
-    content_sim = compute_content_similarity(movies)
-    cf_sim = compute_collaborative_similarity(movies, ratings)
+    content_features = compute_content_features(movies)
+    cf_features = compute_collaborative_features(movies, ratings)
 
 st.header("📊 Data Exploration")
 col1, col2, col3 = st.columns(3)
@@ -325,34 +351,30 @@ with col_filters:
     content_weight = st.slider("Content vs Collaborative", 0.0, 1.0, 0.5, 0.05)
 
 if movie_name:
-    # Notice we don't pass content_weight anymore, so it uses the 0.5 (balanced) default
     recs = recommend_hybrid(
         movie_title=movie_name,
         movies_df=movies,
-        content_sim_matrix=content_sim,
-        cf_sim_matrix=cf_sim,
+        content_features=content_features,
+        cf_features=cf_features,
         content_weight=content_weight,
-        top_n=10,
+        top_n=5,
         min_avg_rating=min_rating,
         rating_agg=rating_agg,
+        require_full_results=True,
     )
 
     if not recs:
         st.warning(
-            "No recommendations found. Try a different movie or lower the rating filter."
+            "No suggestions found for this search and filter combination."
         )
     else:
-        display_n = min(5, len(recs))
-        st.subheader(f"Top {display_n} recommendations for **{movie_name}**")
+        st.subheader(f"Top 5 recommendations for **{movie_name}**")
 
-        cols = st.columns(display_n)
-        for col, rec in zip(cols, recs[:display_n]):
+        cols = st.columns(5)
+        for col, rec in zip(cols, recs):
             title, genres, score, year = rec
             with col:
-                # Add your TMDB API Key into `.streamlit/secrets.toml` as [tmdb] api_key="YOUR_KEY"
-                # For safety, defaulting to "" if it's missing so the app doesn't crash
-                api_key = st.secrets["tmdb"]["api_key"] if "tmdb" in st.secrets else ""
-
+                api_key = get_tmdb_api_key()
                 poster_bytes = fetch_poster_bytes(title, year, api_key)
                 st.image(get_image_from_bytes(poster_bytes), use_container_width=True)
 
@@ -367,8 +389,8 @@ if movie_name:
                     unsafe_allow_html=True,
                 )
 
-        # Full top 10 table
-        st.markdown("<br><b>Top 10 Detailed View</b>", unsafe_allow_html=True)
+        # Full top 5 table
+        st.markdown("<br><b>Top 5 Detailed View</b>", unsafe_allow_html=True)
         df_out = pd.DataFrame(
             [
                 {
