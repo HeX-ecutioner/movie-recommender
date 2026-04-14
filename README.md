@@ -9,7 +9,7 @@ A **hybrid movie recommender system** with content-based + collaborative filteri
 - 🧠 **Cosine similarity** on genres + user rating patterns  
 - ⭐ **Weighted rating system (IMDb-style)** for better ranking  
 - 🎚️ **Adjustable hybrid slider** (content vs collaborative balance)  
-- 🔍 **Smart movie matching** using fuzzy string similarity  
+- 🔍 **Improved movie matching** using RapidFuzz (with fallback to SequenceMatcher) 
 - 🖼️ **Poster display** using TMDB API  
 - 📊 **Top-rated movies table** and dataset insights  
 - 🖌️ Clean and responsive **Streamlit UI**
@@ -22,24 +22,27 @@ This app uses a **hybrid recommendation system**:
 - **Collaborative filtering** → recommends movies liked by similar users  
 - **Hybrid scoring** → combines both using a weighted formula:
 
-Final Score = (w × Content Similarity) + ((1 - w) × Collaborative Similarity)
+`Final Score = (w × Content Similarity) + ((1 - w) × Collaborative Similarity)`
 
 Users can adjust the balance using the **content vs collaborative slider** in the UI.
 
 ## ⚙️ How It Works
 
 1. Loads MovieLens dataset and extracts genres & year.  
-2. Builds a **content-based model** using genre encoding and cosine similarity.  
-3. Builds a **collaborative filtering model** using user–movie rating matrix.  
-4. Normalizes ratings and computes similarity between movies based on user behavior.  
-5. Combines both models into a **hybrid recommender** using weighted scoring.  
-6. Applies **IMDb-style weighted rating filtering** for quality control.  
-7. Fetches movie posters from TMDB using cleaned titles and year.  
-8. Displays results in a poster grid and detailed recommendation table.
+2. Builds a **content-based** representation using genre encoding.
+3. Builds a **collaborative filtering matrix** from user ratings.
+4. Applies **mean-centering** to normalize rating patterns.
+5. Computes similarity using **cosine similarity* *(on demand)***.
+6. Combines both signals using a **weighted hybrid score**.  
+7. Applies **IMDb-style weighted rating filtering** for quality control.  
+8. Fetches movie posters from TMDB using cleaned titles and year.  
+9. Displays:
+    - 🎬 Top 5 recommendations (poster grid)
+    - 📊 Top 10 recommendations (detailed table)
 
 ## 🖼️ Demo Screenshot
 
-![App Screenshot](screenshots/Screenshot1.png)
+![App Screenshot](assets/Screenshot.png)
 *Example layout showing top recommendations with posters.*
 
 ## 🚀 Getting Started
@@ -81,8 +84,6 @@ pip install -r requirements.txt
 api_key = "YOUR_API_KEY_HERE"
 ```
 
-5. Ensure the `assets/no_poster.png` file exists (used as a placeholder).
-
 ### ▶️ Running the App
 
 ```bash
@@ -114,6 +115,7 @@ The app automatically downloads the dataset if not present.
 - scikit-learn
 - requests
 - pillow
+- rapidfuzz
 
 ### ⚖️ License
 
