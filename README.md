@@ -106,13 +106,14 @@ The app intelligently handles the dataset structure, automatically downloading i
 
 ### 📦 Dependencies
 
-- fastapi
-- uvicorn
 - numpy
 - pandas
-- scikit-learn
-- requests
 - pillow
+- fastapi
+- uvicorn
+- requests
+- rapidfuzz
+- scikit-learn
 - python-dotenv
 
 ### ⚖️ License
