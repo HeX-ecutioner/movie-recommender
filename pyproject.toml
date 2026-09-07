@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cine-expert"
+version = "1.1.0"
+description = "High-performance hybrid movie recommendation engine with FastAPI backend and glassmorphic frontend"
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "Sagnik Maitra" }
+]
+keywords = [
+    "movie-recommender",
+    "recommendation-system",
+    "collaborative-filtering",
+    "tf-idf",
+    "machine-learning",
+    "fastapi",
+    "movielens",
+    "tmdb"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Framework :: FastAPI"
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "pillow",
+    "fastapi",
+    "uvicorn",
+    "requests",
+    "pydantic",
+    "rapidfuzz",
+    "scikit-learn",
+    "python-dotenv"
+]
+
+[project.urls]
+Homepage = "https://github.com/HeX-ecutioner/cine-expert"
+Repository = "https://github.com/HeX-ecutioner/cine-expert.git"
+Documentation = "https://github.com/HeX-ecutioner/cine-expert/tree/main/docs"
+"Bug Tracker" = "https://github.com/HeX-ecutioner/cine-expert/issues"
+Changelog = "https://github.com/HeX-ecutioner/cine-expert/blob/main/CHANGELOG.md"

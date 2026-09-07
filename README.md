@@ -38,6 +38,19 @@ Users can seamlessly adjust this balance (`w`) using the slider in the UI.
     - 🎬 Top 5 recommendations (poster grid)
     - 📊 Top 10 recommendations (detailed analytical table)
 
+## 📚 Detailed Documentation
+
+Comprehensive documentation guides are available in the [`docs/`](docs/) directory:
+
+| Guide | Highlights |
+| :--- | :--- |
+| **[Documentation Index](docs/README.md)** | Overview hub and table of contents. |
+| **[System Architecture](docs/architecture.md)** | Decoupled architecture, directory layout, and serverless vs local deployment. |
+| **[Recommendation Engine](docs/recommendation_engine.md)** | Mathematical formulations, TF-IDF soup, CF normalization, and IMDb Bayesian weighted rating. |
+| **[Title Resolution & Ambiguity](docs/title_resolution.md)** | Multi-tier title resolver, year parsing, ambiguity contracts, and natural title display. |
+| **[REST API Reference](docs/api.md)** | Endpoint specifications, query parameters, response schemas, and TMDB proxy details. |
+| **[Frontend & UI Guide](docs/frontend.md)** | Design tokens, HSL themes, glassmorphism, suggestion chips, and asset cache invalidation. |
+
 ## 🚀 Getting Started
 
 ### 🔧 Prerequisites
@@ -115,6 +128,13 @@ The app intelligently handles the dataset structure, automatically downloading i
 - rapidfuzz
 - scikit-learn
 - python-dotenv
+
+## 🤝 Community & Project Standards
+
+- 💡 **[Contributing Guide](CONTRIBUTING.md)** — Step-by-step instructions for reporting issues, suggesting enhancements, and creating pull requests.
+- 📜 **[Code of Conduct](CODE_OF_CONDUCT.md)** — Contributor Covenant pledge and community guidelines.
+- 🔒 **[Security Policy](SECURITY.md)** — Vulnerability reporting and security considerations.
+- 📋 **[Changelog](CHANGELOG.md)** — Version history and release notes.
 
 ### ⚖️ License
 
