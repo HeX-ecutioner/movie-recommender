@@ -24,21 +24,26 @@ def clean_title(title):
 
 
 def fix_title_display(title):
+    if not title or not isinstance(title, str):
+        return "" if title is None else str(title)
+
     # Separate the year if it exists at the end
     match = re.search(r"^(.*?)(\s*\(\d{4}\))?$", title)
-    if match:
-        name = match.group(1)
-        year = match.group(2) or ""
+    if not match:
+        return title
 
-        if name.endswith(", The"):
-            name = "The " + name[:-5]
-        elif name.endswith(", A"):
-            name = "A " + name[:-3]
-        elif name.endswith(", An"):
-            name = "An " + name[:-4]
+    name = match.group(1).strip()
+    year = match.group(2) or ""
 
-        return name + year
-    return title
+    # Check for trailing article, with optional non-year parenthetical (e.g. alternate foreign title)
+    art_match = re.search(r"^(.*?),\s*(The|A|An)(\s+\([^)]*?\))?$", name, re.IGNORECASE)
+    if art_match:
+        base = art_match.group(1).strip()
+        article = art_match.group(2).capitalize()
+        extra = art_match.group(3) or ""
+        return f"{article} {base}{extra}{year}"
+
+    return name + year
 
 
 def best_match(results, clean_title, year=None):

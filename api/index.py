@@ -25,6 +25,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def add_cache_control_header(request, call_next):
+    response = await call_next(request)
+    if any(request.url.path.endswith(ext) for ext in (".css", ".js", ".html")):
+        response.headers["Cache-Control"] = "no-cache, must-revalidate"
+    return response
+
 # Static files will be mounted at the end of the file to allow API routes to take precedence
 
 # Load data at startup
@@ -68,9 +75,21 @@ def get_stats():
     }
 
 @app.get("/api/recommend")
-def get_recommendations(movie: str, content_weight: float = 0.5, min_rating: float = 3.5, top_n: int = 10):
+def get_recommendations(
+    movie: str = None,
+    title: str = None,
+    content_weight: float = 0.5,
+    min_rating: float = 3.5,
+    top_n: int = 10,
+):
+    movie_query = movie if movie is not None else title
+    if not movie_query:
+        raise HTTPException(
+            status_code=422,
+            detail="Either 'movie' or 'title' query parameter is required.",
+        )
     try:
-        resolution = resolve_movie_title(movie, movies)
+        resolution = resolve_movie_title(movie_query, movies)
         if resolution.is_ambiguous:
             candidates = resolution.candidates
             # Rank candidates by popularity using rating_agg if available
@@ -91,16 +110,16 @@ def get_recommendations(movie: str, content_weight: float = 0.5, min_rating: flo
                 if best_cand.get("year") and str(best_cand["year"]) not in ex_title:
                     ex_title = f"{ex_title} ({best_cand['year']})"
             else:
-                ex_title = movie
+                ex_title = movie_query
 
             message = (
-                f"Multiple movies matched \u201c{movie}\u201d. "
+                f"Multiple movies matched \u201c{movie_query}\u201d. "
                 f"Please include a year, such as \u201c{ex_title}\u201d."
             )
 
             matches = [
                 {
-                    "title": c["title"],
+                    "title": fix_title_display(c["title"]),
                     "year": int(c["year"]) if c.get("year") is not None else None,
                 }
                 for c in candidates
@@ -109,13 +128,13 @@ def get_recommendations(movie: str, content_weight: float = 0.5, min_rating: flo
             return {
                 "recommendations": [],
                 "status": "ambiguous",
-                "query": movie,
+                "query": movie_query,
                 "message": message,
                 "matches": matches,
             }
 
         recs = recommend_hybrid(
-            movie,
+            movie_query,
             movies,
             content_features,
             cf_features,

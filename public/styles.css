@@ -649,18 +649,6 @@ tr:hover td {
     margin-top: auto;
 }
 
-/* Error Banner */
-.error-banner {
-    background: rgba(244, 63, 94, 0.1);
-    color: var(--accent);
-    padding: 1rem;
-    border-radius: 12px;
-    border: 1px solid rgba(244, 63, 94, 0.2);
-    text-align: center;
-    font-weight: 500;
-    margin: 2rem 0;
-}
-
 /* Responsive */
 @media (max-width: 768px) {
     .nav-content {
@@ -670,7 +658,8 @@ tr:hover td {
     }
 
     .brand-name {
-        font-size: 1.8rem !important; /* override inline style for mobile */
+        font-size: 1.8rem !important;
+        /* override inline style for mobile */
     }
 
     .nav-right {
@@ -740,7 +729,8 @@ tr:hover td {
     }
 
     .glow-orb {
-        display: none; /* Hide heavy orbs on mobile for performance and overflow protection */
+        display: none;
+        /* Hide heavy orbs on mobile for performance and overflow protection */
     }
 }
 
