@@ -50,6 +50,8 @@ async function searchMovies() {
     const errDiv = document.getElementById('errorMessage');
 
     wrapper.style.display = 'none';
+    errDiv.className = 'error-banner';
+    errDiv.innerHTML = '';
     errDiv.style.display = 'none';
     loading.style.display = 'block';
 
@@ -60,7 +62,60 @@ async function searchMovies() {
         const data = await response.json();
         loading.style.display = 'none';
 
-        if (data.recommendations && data.recommendations.length > 0) {
+        if (data.status === 'ambiguous') {
+            errDiv.className = 'ambiguity-banner';
+            errDiv.innerHTML = '';
+
+            const contentDiv = document.createElement('div');
+            contentDiv.className = 'ambiguity-content';
+
+            const iconDiv = document.createElement('div');
+            iconDiv.className = 'ambiguity-icon';
+            iconDiv.innerText = '💡';
+
+            const bodyDiv = document.createElement('div');
+            bodyDiv.className = 'ambiguity-body';
+
+            const msgP = document.createElement('p');
+            msgP.className = 'ambiguity-message';
+            msgP.innerText = data.message || `Multiple movies matched "${movieInput}". Please include a release year.`;
+            bodyDiv.appendChild(msgP);
+
+            if (data.matches && data.matches.length > 0) {
+                const suggDiv = document.createElement('div');
+                suggDiv.className = 'ambiguity-suggestions';
+
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'suggestion-label';
+                labelSpan.innerText = 'Select a specific title:';
+                suggDiv.appendChild(labelSpan);
+
+                const chipsDiv = document.createElement('div');
+                chipsDiv.className = 'suggestion-chips';
+
+                data.matches.forEach(m => {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'suggestion-chip';
+                    btn.innerText = m.title;
+                    btn.title = `Search for ${m.title}`;
+                    btn.addEventListener('click', () => {
+                        document.getElementById('movieInput').value = m.title;
+                        searchMovies();
+                    });
+                    chipsDiv.appendChild(btn);
+                });
+
+                suggDiv.appendChild(chipsDiv);
+                bodyDiv.appendChild(suggDiv);
+            }
+
+            contentDiv.appendChild(iconDiv);
+            contentDiv.appendChild(bodyDiv);
+            errDiv.appendChild(contentDiv);
+            errDiv.style.display = 'block';
+
+        } else if (data.recommendations && data.recommendations.length > 0) {
             document.getElementById('resultsTitle').innerText = `Top 5 recommendations for ${movieInput}`;
             document.getElementById('resultsTitle').style.display = 'block';
 
@@ -104,12 +159,14 @@ async function searchMovies() {
             document.getElementById('detailedView').style.display = 'block';
 
         } else {
+            errDiv.className = 'error-banner';
             errDiv.innerText = 'No recommendations found.';
             errDiv.style.display = 'block';
         }
 
     } catch (err) {
         loading.style.display = 'none';
+        errDiv.className = 'error-banner';
         errDiv.innerText = err.message;
         errDiv.style.display = 'block';
     }

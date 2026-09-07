@@ -743,3 +743,98 @@ tr:hover td {
         display: none; /* Hide heavy orbs on mobile for performance and overflow protection */
     }
 }
+
+/* Error and Ambiguity Banners */
+.error-banner {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 1.25rem 1.75rem;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 16px;
+    color: #f87171;
+    font-size: 1rem;
+    text-align: center;
+    backdrop-filter: blur(10px);
+}
+
+.ambiguity-banner {
+    max-width: 800px;
+    margin: 2rem auto;
+    padding: 1.5rem 2rem;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.3);
+    border-radius: 20px;
+    backdrop-filter: blur(12px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+    animation: fadeIn 0.3s ease-out;
+}
+
+.ambiguity-content {
+    display: flex;
+    gap: 1.25rem;
+    align-items: flex-start;
+}
+
+.ambiguity-icon {
+    font-size: 1.75rem;
+    line-height: 1;
+    flex-shrink: 0;
+}
+
+.ambiguity-body {
+    flex: 1;
+}
+
+.ambiguity-message {
+    font-size: 1.05rem;
+    line-height: 1.5;
+    color: var(--text-main);
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+
+.ambiguity-suggestions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.suggestion-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+}
+
+.suggestion-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    margin-top: 0.25rem;
+}
+
+.suggestion-chip {
+    background: rgba(99, 102, 241, 0.15);
+    border: 1px solid var(--primary);
+    color: var(--text-main);
+    padding: 0.5rem 1.1rem;
+    border-radius: 999px;
+    font-size: 0.92rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+}
+
+.suggestion-chip:hover {
+    background: var(--primary);
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px var(--primary-glow);
+}
+
+.suggestion-chip:active {
+    transform: translateY(0);
+}
