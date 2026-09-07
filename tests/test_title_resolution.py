@@ -1,6 +1,6 @@
-import unittest
-import sys
 import os
+import sys
+import unittest
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:
@@ -36,7 +36,9 @@ class TestTitleResolution(unittest.TestCase):
         print(f"  -> Matching Method:         {res.method}")
         print(f"  -> Year Constraint Respected: {res.year_constraint_respected}")
         if res.is_ambiguous:
-            print(f"  -> Ambiguous Candidates:   {[c['title'] for c in res.candidates]}")
+            print(
+                f"  -> Ambiguous Candidates:   {[c['title'] for c in res.candidates]}"
+            )
         return res
 
     def test_batman_begins(self):
@@ -95,7 +97,7 @@ class TestTitleResolution(unittest.TestCase):
         self.assertIsNone(res.movie_id)
         self.assertTrue(res.year_constraint_respected)
         candidate_ids = [c["movieId"] for c in res.candidates]
-        self.assertIn(2153, candidate_ids)   # Avengers, The (1998)
+        self.assertIn(2153, candidate_ids)  # Avengers, The (1998)
         self.assertIn(89745, candidate_ids)  # Avengers, The (2012)
         # Verify backwards compatibility for find_movie_index returns AmbiguityResult
         amb = find_movie_index(query, self.movies)
@@ -130,16 +132,16 @@ class TestTitleResolution(unittest.TestCase):
         )
 
         expected_titles = [
-            "Edge of Tomorrow (2014)",
-            "Harry Potter and the Deathly Hallows: Part 1 (2010)",
-            "The Raid: Redemption (2011)",
-            "Boondock Saints, The (2000)",
             "Dark Knight, The (2008)",
+            "Boondock Saints, The (2000)",
+            "Edge of Tomorrow (2014)",
+            "The Raid: Redemption (2011)",
+            "Harry Potter and the Deathly Hallows: Part 1 (2010)",
+            "Toy Story 3 (2010)",
             "Watchmen (2009)",
             "Elite Squad: The Enemy Within (Tropa de Elite 2 - O Inimigo Agora É Outro) (2010)",
-            "Toy Story 3 (2010)",
             "Baby Driver (2017)",
-            "Heat (1995)",
+            "Dark Knight Rises, The (2012)",
         ]
 
         actual_titles = [r[0] for r in recs]
@@ -147,8 +149,16 @@ class TestTitleResolution(unittest.TestCase):
 
         # Verify exact baseline hybrid scores
         expected_scores = [
-            0.479753, 0.459704, 0.454147, 0.416930, 0.403328,
-            0.395528, 0.375401, 0.362266, 0.355876, 0.345316
+            0.541707,
+            0.514434,
+            0.513696,
+            0.502753,
+            0.473388,
+            0.432828,
+            0.421090,
+            0.379820,
+            0.371053,
+            0.366252,
         ]
         for (actual_title, _, actual_score, _), exp_score in zip(recs, expected_scores):
             self.assertAlmostEqual(actual_score, exp_score, places=4)

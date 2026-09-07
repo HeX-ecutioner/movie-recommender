@@ -330,6 +330,49 @@ def find_movie_index(movie_title, movies_df, return_details=False):
     return None
 
 
+def _normalize_component_scores(
+    content_scores, cf_scores, query_idx=None, cf_ref=0.5
+):
+    """
+    Normalizes content and collaborative filtering similarity components into a stable [0.0, 1.0] range.
+
+    Args:
+        content_scores (array-like): Raw content cosine similarities (typically [0.0, 1.0]).
+        cf_scores (array-like): Raw collaborative cosine similarities (typically [-1.0, 1.0]).
+        query_idx (int, optional): Index of the query movie to zero out self-similarity.
+        cf_ref (float): Reference upper ceiling for collaborative similarity (default 0.50).
+            Items with collaborative correlation >= cf_ref reach maximum normalized CF score (1.0).
+            Weak signals (< 0.1) remain proportionally low rather than being artificially inflated.
+
+    Returns:
+        tuple[np.ndarray, np.ndarray]: (c_norm, cf_norm), both 1D float32 arrays bounded in [0.0, 1.0].
+    """
+    c = np.nan_to_num(
+        np.asarray(content_scores, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+    cf = np.nan_to_num(
+        np.asarray(cf_scores, dtype=np.float32),
+        nan=0.0,
+        posinf=0.0,
+        neginf=0.0,
+    )
+
+    c_norm = np.clip(c, 0.0, 1.0)
+    cf_pos = np.maximum(0.0, cf)
+    scale = max(float(cf_ref), 1e-6)
+    cf_norm = np.clip(cf_pos / scale, 0.0, 1.0)
+
+    if query_idx is not None and 0 <= query_idx < len(c_norm):
+        c_norm[query_idx] = 0.0
+    if query_idx is not None and 0 <= query_idx < len(cf_norm):
+        cf_norm[query_idx] = 0.0
+
+    return c_norm, cf_norm
+
+
 def recommend_hybrid(
     movie_title,
     movies_df,
@@ -351,9 +394,11 @@ def recommend_hybrid(
     ).ravel()
     cf_scores = cosine_similarity(cf_features[idx : idx + 1], cf_features).ravel()
 
-    hybrid_scores = (content_weight * content_scores) + (
-        (1 - content_weight) * cf_scores
+    c_norm, cf_norm = _normalize_component_scores(
+        content_scores, cf_scores, query_idx=idx
     )
+
+    hybrid_scores = (content_weight * c_norm) + ((1 - content_weight) * cf_norm)
 
     sim_scores = list(enumerate(hybrid_scores))
     sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
